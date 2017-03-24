@@ -306,7 +306,7 @@ try
     % kcsUDP
     
     %%% load file with rig-specific parameters
-    rigSpecific;
+    rigSpecific_pc39;
     sockrunning = pnet('udpsocket',runningport);
 
     
@@ -352,8 +352,7 @@ try
     white = WhiteIndex(window);
     black = BlackIndex(window);
     grey = round(0.5*(black+white));
-    
-    nCond = size(handles.orient,2);
+         nCond = size(handles.orient,2);
     stim = get(handles.StimType,'Value');
     
     % nReps is the number of repetitions of the entire stimulus sequence
@@ -371,7 +370,7 @@ try
     % darcy: this references the 'contrast' guide field.
     contrast=handles.contrast(1);   
     %%%for clut animation
-    if ismember(stim, [1 4 5 6 8 9]) % [drift gratings, flash, checkerboard, c-phase gratings]
+    if ismember(stim, [1 4 5 6 8 9 16]) % [drift gratings, flash, checkerboard, c-phase gratings]
         clut=1;
         sizeLut=256;
         offclut=zeros(sizeLut,3);
@@ -390,13 +389,18 @@ try
     %% stimulus construction lines ~390-890
     switch stim
         %%%%%%  drifting, counterphase, reverse,curved
-        case {1,6,8,9}
+        case {1,16,6,8,9}
             % screen_gamma=2;
             textures = zeros(nCond,1);
             maskTexture = zeros(nCond,1);
             for c = 1:nCond
                 if get(handles.StimType,'Value')==1   %%% drift gratings
                     [img cl] = generateGratings_lut(handles.orient(c),handles.freq(c),handles.TempFreq(c),handles.phase(c),handles.contrast(c),Duration, degPerPix,imageRect(3),imageRect(4),FrameHz,black,white,sizeLut);
+                elseif get(handles.StimType,'Value')==16   %%% drift gratings with static grating at the first half
+                    [img cl] = generateGratings_lut(handles.orient(c),handles.freq(c),handles.TempFreq(c),handles.phase(c),handles.contrast(c),Duration, degPerPix,imageRect(3),imageRect(4),FrameHz,black,white,sizeLut);
+                    for i=1:size(cl,3)/2
+                        cl(:,:,i)=cl(:,:,end/2+1);
+                    end
                 elseif get(handles.StimType,'Value')==6 % counterphase gratings
                     [img cl] = generateCPGratings_lut(handles.orient(c),handles.freq(c),handles.TempFreq(c),handles.phase(c),handles.contrast(c),Duration, degPerPix,imageRect(3),imageRect(4),FrameHz,black,white,sizeLut);
                 elseif get(handles.StimType,'Value')==8   %%% reverse drift gratings
@@ -892,11 +896,17 @@ try
     end % of switch stim
     
     %% gamma correction
-    screen_gamma=1.83
-    flat_clut = [(0:1/255:1)' (0:1/255:1)' (0:1/255:1)'];
-    gamma_clut = flat_clut.^(1/screen_gamma);
-    Screen('LoadNormalizedGammaTable',window,gamma_clut);
-    %Screen('LoadNormalizedGammaTable',window,flat_clut);
+    try 
+        load MyGammaTable
+        Screen('LoadNormalizedGammaTable', win, gammaTable*[1 1 1]);
+    catch
+        display('No Gamma Table, recommended to use CalibrateMonitorPhotometer.m to make one')
+        screen_gamma=1.83
+        flat_clut = [(0:1/255:1)' (0:1/255:1)' (0:1/255:1)'];
+        gamma_clut = flat_clut.^(1/screen_gamma);
+        Screen('LoadNormalizedGammaTable',window,gamma_clut);
+        %Screen('LoadNormalizedGammaTable',window,flat_clut);
+    end
     
     %% clear screen --
     Screen('FillRect',window,grey);
@@ -1137,7 +1147,7 @@ try
         %% loop on conditions
         while ~doneStim
             
-            %%% randomize conditions
+            %%%randomize conditions
             if get(handles.randomize,'Value');
                 if mod(iter,nCond)==0   %%% shuffle condition list each r epeat
                     condList = Shuffle(1:nCond);
@@ -1340,12 +1350,15 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     lptwrite(888,1); % 2^0
                    elseif stimsync == 'SER'
                     IOPort('configureserialport', serialhandle, 'RTS=1'); % RTS=0 is 0V.
-                   else  %stimsync == 'UDP'
+                   elseif stimsyc == 'WFCA-UDP'
+                    pnet(stimsyncUdp, 'write', uint8(c));        %strobe framesync
+                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                   else %stimsync == 'UDP'
                     pnet(stimsyncUdp, 'write', uint8(1+2));        %strobe framesync
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-                    WaitSecs(0.0005);
                     pnet(stimsyncUdp, 'write', uint8(1+0));
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                     WaitSecs(0.0005);
                    end
                      
 %                     WaitSecs(0.001); % commented out by MCD 2015
@@ -1429,7 +1442,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                end
                 
 %                 lptwrite(888,0+0); % mcd 2015
-0                %save(syncfilename,'paramfilename','intanSyncData');
+                %save(syncfilename,'paramfilename','intanSyncData');
                 % changed to unify intan file with parameter file
                 save(paramfilename, 'paramfilename', 'intanSyncData', '-append');
                 
