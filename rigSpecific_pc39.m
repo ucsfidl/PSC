@@ -39,7 +39,7 @@ room = 'UCSF460G';
 % 'LPT' is Maria's in 460A parallel port
 % 'SER' is Shinya's at UCSC using a matlab toolbox
 % 'UDP' is Michael's using an Arduino board like mps-pc21 using the program UDP2TTL
-stimsync = 'WFCA-UDP';
+stimsync = 'WFC';
 stimsynchost = 'mps-pc48.cin.ucsf.edu'; %WFCAhost = 'mps-pc48.cin.ucsf.edu'; the Widefield Imaing computer 
 stimsyncport = 8932;
 

@@ -1350,7 +1350,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     lptwrite(888,1); % 2^0
                    elseif stimsync == 'SER'
                     IOPort('configureserialport', serialhandle, 'RTS=1'); % RTS=0 is 0V.
-                   elseif stimsyc == 'WFCA-UDP'
+                   elseif stimsync == 'WFC'
                     pnet(stimsyncUdp, 'write', uint8(c));        %strobe framesync
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                    else %stimsync == 'UDP'
