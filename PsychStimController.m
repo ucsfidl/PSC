@@ -87,7 +87,7 @@ function varargout = PsychStimController(varargin)
 
 % Edit the above text to modify the response to help PsychStimController
 
-% Last Modified by GUIDE v2.5 22-Nov-2016 17:27:28
+% Last Modified by GUIDE v2.5 25-Mar-2017 16:53:31
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -152,6 +152,13 @@ StimType_Callback(handles.StimType,eventdata,handles);
 Var1_Callback(handles.Var1,eventdata,handles);
 Var2_Callback(handles.Var2,eventdata,handles);
 Var3_Callback(handles.Var3,eventdata,handles);
+
+% MH setup the NI card
+devices = daq.getDevices;
+if ~isempty(devices) 
+    niHardwareHandle = daq.createSession('ni');
+    niHardwareHandle.addAnalogOutputChannel('Dev1', 'ao0', 'Voltage');
+end
 
 % try
 %     IOPort('closeall');
@@ -306,7 +313,7 @@ try
     % kcsUDP
     
     %%% load file with rig-specific parameters
-    rigSpecific_pc39;
+    rigSpecific_pc5;
     sockrunning = pnet('udpsocket',runningport);
 
     
@@ -334,7 +341,7 @@ try
     whichScreen = str2double(get(handles.ScreenNum,'String'));
     [window,windowRect]=Screen(whichScreen,'OpenWindow',128);   %%% open grey window
     %%% adding the runningexpt option on the PSC control panel
-    runningexpt=get(handles.runningexpt,'Value')
+%    runningexpt=get(handles.runningexpt,'Value')
     imageRect = windowRect;
     Screen('DrawText',window,sprintf('Generating stimuli'),10,30);
     Screen('Flip',window);
@@ -368,7 +375,8 @@ try
     backlum = round(((white-black)*(backlum+1))/2);
     
     % darcy: this references the 'contrast' guide field.
-    contrast=handles.contrast(1);   
+    contrast=handles.contrast(1);  
+
     %%%for clut animation
     if ismember(stim, [1 4 5 6 8 9 16]) % [drift gratings, flash, checkerboard, c-phase gratings]
         clut=1;
@@ -385,7 +393,8 @@ try
         %     blanktexture(1,1) = Screen('MakeTexture',window,blankimage);
     else %% stim == 3 or 12 or 13
         clut=0;
-    end   
+    end 
+
     %% stimulus construction lines ~390-890
     switch stim
         %%%%%%  drifting, counterphase, reverse,curved
@@ -900,7 +909,7 @@ try
         load MyGammaTable
         Screen('LoadNormalizedGammaTable', win, gammaTable*[1 1 1]);
     catch
-        display('No Gamma Table, recommended to use CalibrateMonitorPhotometer.m to make one')
+        disp('No Gamma Table, recommended to use CalibrateMonitorPhotometer.m to make one')
         screen_gamma=1.83
         flat_clut = [(0:1/255:1)' (0:1/255:1)' (0:1/255:1)'];
         gamma_clut = flat_clut.^(1/screen_gamma);
@@ -1049,7 +1058,6 @@ try
     flickCond = 0;
     
     %% add blank stimulus as extra condition
-
     if get(handles.blankstim,'Value')
         if clut
             nCond = nCond + 1;
@@ -1211,8 +1219,14 @@ try
                elseif stimsync == 'SER'
                 IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
                else  %stimsync == 'UDP'
-                pnet(stimsyncUdp, 'write', uint8(1+0));
-                pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                    % turn on laser with eye shutter
+                    if handles.eye(c) == 1
+                        pnet(stimsyncUdp, 'write', uint8(5)); % 5 == turn laser ON
+                        pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                    end
+                    % set trial on signal
+                    pnet(stimsyncUdp, 'write', uint8(1+0));
+                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                end
              
                 if (c <= stimConds)
@@ -1239,6 +1253,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                 
             end
             
+
             %% set eye shutters
             disp(sprintf('eye: %d',handles.eye(c)));
             eyeString = sprintf('%c%c',65, uint8(64*handles.eye(c)));
@@ -1274,7 +1289,31 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
             else
                 vbl = Screen('Flip',window);  %%% initial flip, to sync with vertical blank
             end
+
             %% loop through frames
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
+            %%%%% MH add in filling national instruments buffer %%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            if handles.eye(c) == 1
+                global laserRampDur laserAmp laserTotalDur slope
+                
+                laserRampDur = str2double(get(handles.laser_ramp_dur, 'string')); % correct this and add the other data
+                laserTotalDur = str2double(get(handles.Duration, 'string')); % correct this and add the other data
+                laserAmp = str2double(get(handles.laser_amp, 'string')); % correct this and add the other data
+                
+                slope = laserAmp/laserRampDur;
+                
+                tic;
+                start_time = toc;
+                tt = 0;
+                while tt < laserRampDur
+                    if (toc-start_time)*1e3 > tt
+                        niHardwareHandle.outputSingleScan(slope*tt);
+                    end
+                    tt = tt + 1;
+                end
+            end
+
             f = minframe;
             while f <= maxframe
                 s1(f) = GetSecs;
@@ -1358,7 +1397,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                     pnet(stimsyncUdp, 'write', uint8(1+0));
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-                     WaitSecs(0.0005);
+                    WaitSecs(0.0005);
                    end
                      
 %                     WaitSecs(0.001); % commented out by MCD 2015
@@ -1400,6 +1439,23 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
 %%
                 f = f+1;
             end
+
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
+            %%%%% MH add in filling national instruments buffer %%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            if handles.eye(c) == 1
+                tic;
+                start_time = toc;
+                tt = 0;
+                while tt < laserRampDur
+                    if (toc-start_time)*1e3 > tt
+                        niHardwareHandle.outputSingleScan(laserAmp-slope*tt);
+                    end
+                    tt = tt + 1;
+                end
+            end
+            
+            
 %% done with stimulus
             if clearBkgrnd
                 if clut
@@ -1657,7 +1713,7 @@ SyncSource = get(handles.SyncSource,'Value'); %#ok
 
 blankbkgrnd = get(handles.bkgrnd,'Value'); %#ok
 randomize = get(handles.randomize,'Value'); %#ok
-runningexpt = get(handles.runningexpt,'Value'); %#ok
+%runningexpt = get(handles.runningexpt,'Value'); %#ok
 blankstim = get(handles.blankstim,'Value'); %#ok
 FullFlicker = get(handles.FullFlicker,'Value'); %#ok
 nReps = get(handles.nReps,'String'); %#ok
@@ -1686,7 +1742,7 @@ save(fname, 'Orient0', 'Freq0', 'TempFreq0','Phase0','Speed0', 'Contrast0','Dura
     'PixelsX','PixelsY','SizeX','SizeY','ScreenDist','Var1Str','Var1Val','Start1','Stop1','nSteps1','LinLog1', ...
     'Var2Str','Var2Val','Start2','Stop2','nSteps2','LinLog2','Var3Str','Var3Val','Start3','Stop3','nSteps3','LinLog3', ...
     'MovieName','MovieMag','MovieRate', ...
-    'orient', 'freq', 'speed', 'contrast','phase','TempFreq','length','positionX','positionY','blankbkgrnd','randomize','runningexpt','blankstim','FullFlicker',...
+    'orient', 'freq', 'speed', 'contrast','phase','TempFreq','length','positionX','positionY','blankbkgrnd','randomize','blankstim','FullFlicker',...
     'nReps','phasePeriod','stimulusGroups','squaregratings', ...
     'DoNearScreen', 'cp_azdeg', 'cp_eldeg', 'cpx_cm', 'cpy_cm','backlum', ...
     'SyncSource');
@@ -2689,14 +2745,18 @@ if exist('MovieMag','var')
     % xsize (no ysize)
 end
 
-
-
 % --- Executes on button press in eyeCond0.
 function eyeCond0_Callback(hObject, eventdata, handles)
 % hObject    handle to eyeCond0 (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
+if str2double(get(hObject,'string')) == 0 %none
+    set(handles.laser_ramp_dur,'Enable','off');
+    set(handles.laser_amp,'Enable','off');    
+else
+    set(handles.laser_ramp_dur,'Enable','on');
+    set(handles.laser_amp,'Enable','on');
+end
 
 % --- Executes during object creation, after setting all properties.
 function eyeCond0_CreateFcn(hObject, eventdata, handles)
@@ -3180,3 +3240,58 @@ function runningexpt_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
 % Hint: get(hObject,'Value') returns toggle state of runningexpt
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%% Laser beam parameters %%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+function laser_ramp_dur_Callback(hObject, eventdata, handles)
+% hObject    handle to laser_ramp_dur (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of laser_ramp_dur as text
+%        str2double(get(hObject,'String')) returns contents of laser_ramp_dur as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function laser_ramp_dur_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to laser_ramp_dur (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+function laser_amp_Callback(hObject, eventdata, handles)
+% hObject    handle to laser_amp (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hints: get(hObject,'String') returns contents of laser_amp as text
+%        str2double(get(hObject,'String')) returns contents of laser_amp as a double
+
+
+% --- Executes during object creation, after setting all properties.
+function laser_amp_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to laser_amp (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes on button press in checkbox10.
+function checkbox10_Callback(hObject, eventdata, handles)
+% hObject    handle to checkbox10 (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    structure with handles and user data (see GUIDATA)
+
+% Hint: get(hObject,'Value') returns toggle state of checkbox10
