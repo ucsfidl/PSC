@@ -22,24 +22,24 @@ function varargout = PsychStimController(varargin)
 % See also: GUIDE, GUIDATA, GUIHANDLES
 
 %% Recent Revisions
-% 
+%
 % MPS 2016Aug24 Should revise soon to use the calls in ClutAnimDemo to eliminate OpeGL error
 % and also to modularize, separating all the synch stuff into different files
-% 
+%
 % % Pupil and Eye tracker interface MPS 15Aug2016
 % Eye tracker Windows Program wants
 % Filename at the start
-% then for each pupil image to be saved, a single 32-bit float 
+% then for each pupil image to be saved, a single 32-bit float
 % that is the timestamp in seconds from the start of recording.
-% Current CPP_Snapsohot program works only for intervals > 65 msec.  
+% Current CPP_Snapsohot program works only for intervals > 65 msec.
 % I will plan to take a pupil image every 6 frames, which will
 % give us pupil images at 10 Hz.
 % To stop the pupil program, send a floating -1.
 
 % Rapid switching of stimulus for control by locomotion state MPS 08Aug2016
-% UDP input to runningport will be stimulus number. 
-% The display screen switches immediately to the 
-% beginning of the selected stimulus 
+% UDP input to runningport will be stimulus number.
+% The display screen switches immediately to the
+% beginning of the selected stimulus
 % SimUDP call lets you switch by hand just by typing a number.
 % ESC terminates the program.
 
@@ -131,6 +131,7 @@ ktdtPT = 7;
 ktdtPTUDP = 8;
 kintan = 9;
 
+
 %moviedirpath = 'C:\movies\';
 %paramdirpath = 'C:\Program Files\MATLAB\R2006b\work\';
 
@@ -155,7 +156,7 @@ Var3_Callback(handles.Var3,eventdata,handles);
 
 % MH setup the NI card
 devices = daq.getDevices;
-if ~isempty(devices) 
+if ~isempty(devices)
     niHardwareHandle = daq.createSession('ni');
     niHardwareHandle.addAnalogOutputChannel('Dev1', 'ao0', 'Voltage');
 end
@@ -191,7 +192,7 @@ if ismember(StimType, [1, 6, 8, 9])     %% drifting or counterphase gratings
     set(handles.Phase0,'Enable','off');
 end
 
-if get(handles.mask,'Value') == 1 
+if get(handles.mask,'Value') == 1
     set(handles.PositionX0,'Enable','on');
     set(handles.PositionY0,'Enable','on');
     set(handles.Length0,'Enable','on')
@@ -226,7 +227,7 @@ end
 if ismember(StimType,9) % curved gratings/Sgrating
     set(handles.Speed0,'Enable','on')
 end
-     
+
 
 if ismember(StimType, [7, 11, 12, 13]) %% spot or moving spots
     set(handles.PositionX0,'Enable','on');
@@ -294,6 +295,11 @@ end
 
 % --- Executes on button press in RunBtn.
 function RunBtn_Callback(hObject, eventdata, handles) %#ok
+PsychDefaultSetup(0);
+[handles.orient handles.freq handles.speed handles.contrast handles.phase ...
+    handles.TempFreq handles.var1value handles.var2value handles.var3value ...
+    handles.positionX handles.positionY handles.length handles.eye nCond] = generateVarParams(handles);
+
 try
     % hObject    handle to RunBtn (see GCBO)
     % eventdata  reserved - to be defined in a future version of MATLAB
@@ -315,7 +321,7 @@ try
     %%% load file with rig-specific parameters
     rigSpecific_pc5;
     sockrunning = pnet('udpsocket',runningport);
-
+    
     
     %%% save parameters automatically
     % creat new directory for that day
@@ -331,6 +337,11 @@ try
     paramfilename = [date '/' paramfilename];
     
     SaveParams(handles,paramfilename);
+    whichScreen = str2double(get(handles.ScreenNum,'String'));
+    Screen('Preference', 'SkipSyncTests', 0);
+    PsychImaging('PrepareConfiguration');
+    PsychImaging('AddTask', 'AllViews', 'EnableCLUTMapping');
+    [window,windowRect] = PsychImaging('OpenWindow', whichScreen, 0);
     
     InitializeMatlabOpenGL;   %%%necessary for OpenGL calls (like ClutBlit)
     
@@ -338,10 +349,10 @@ try
     %%% display description
     Duration = str2double(get(handles.Duration,'String'));
     FrameHz = round(str2double(get(handles.FrameHz,'String')));
-    whichScreen = str2double(get(handles.ScreenNum,'String'));
-    [window,windowRect]=Screen(whichScreen,'OpenWindow',128);   %%% open grey window
+    %     whichScreen = str2double(get(handles.ScreenNum,'String'));
+    %     [window,windowRect]=Screen(whichScreen,'OpenWindow',128);   %%% open grey window
     %%% adding the runningexpt option on the PSC control panel
-%    runningexpt=get(handles.runningexpt,'Value')
+    %    runningexpt=get(handles.runningexpt,'Value')
     imageRect = windowRect;
     Screen('DrawText',window,sprintf('Generating stimuli'),10,30);
     Screen('Flip',window);
@@ -359,7 +370,7 @@ try
     white = WhiteIndex(window);
     black = BlackIndex(window);
     grey = round(0.5*(black+white));
-         nCond = size(handles.orient,2);
+    %         nCond = size(handles.orient,2);
     stim = get(handles.StimType,'Value');
     
     % nReps is the number of repetitions of the entire stimulus sequence
@@ -367,16 +378,16 @@ try
     nReps = str2double(get(handles.nReps,'String'));
     if nReps <= 0 %% loop almost-infinitely
         nReps = 10000000;
-    end   
-    nStimulusRepetitions = 1; % defaults to 1 for non-movie stimuli    
+    end
+    nStimulusRepetitions = 1; % defaults to 1 for non-movie stimuli
     backlum = str2num(get(handles.BackLum,'String'));
     
     % darcy: map backlum (-1 to 1) onto white to black range
     backlum = round(((white-black)*(backlum+1))/2);
     
     % darcy: this references the 'contrast' guide field.
-    contrast=handles.contrast(1);  
-
+    contrast=handles.contrast(1);
+    
     %%%for clut animation
     if ismember(stim, [1 4 5 6 8 9 16]) % [drift gratings, flash, checkerboard, c-phase gratings]
         clut=1;
@@ -393,8 +404,8 @@ try
         %     blanktexture(1,1) = Screen('MakeTexture',window,blankimage);
     else %% stim == 3 or 12 or 13
         clut=0;
-    end 
-
+    end
+    
     %% stimulus construction lines ~390-890
     switch stim
         %%%%%%  drifting, counterphase, reverse,curved
@@ -446,7 +457,7 @@ try
             
             %%%%% checkerboard  %%%%%%%%%%
         case 5
-            nCond = size(handles.freq,2);
+            %            nCond = size(handles.freq,2);
             textures = zeros(nCond,1);
             for c = 1:nCond
                 [x y]= meshgrid(1:imageRect(3), 1:imageRect(4));
@@ -674,7 +685,7 @@ try
             SizeX = str2double(get(handles.SizeX,'String'));
             SizeY = str2double(get(handles.SizeY,'String'));
             
-            nCond = size(handles.freq,2);  %% what is this??
+            %            nCond = size(handles.freq,2);  %% what is this??
             textures = zeros(nCond,1);
             for c = 1:nCond
                 [x y]= meshgrid(1:imageRect(3), 1:imageRect(4));
@@ -760,7 +771,7 @@ try
             SizeY = str2double(get(handles.SizeY,'String'));
             deg = str2double(get(handles.Orient0, 'String'));
             
-            nCond = size(handles.freq,2);
+            %            nCond = size(handles.freq,2);
             textures = zeros(nCond, 1);
             for c = 1:nCond
                 xposdeg = handles.positionX(c);
@@ -874,7 +885,7 @@ try
             % this does not constrain the number of repetitions in a group, which
             % is set by Duration and phasePeriodFrames
             stimgroups =str2double(get(handles.stimulusGroups,'String'));
-            nCond = stimgroups;
+            %            nCond = stimgroups;
             if nCond > 1
                 % number of repetitions of each stimulus in one group
                 nStimulusRepetitions = (nFrames/phasePeriodFrames) / nCond;
@@ -883,7 +894,7 @@ try
                     error('Movie not evenly divisible; is number of stimulus groups wrong?');
                 end
             else
-                nCond = size(handles.freq,2);   %%% if only one stimulus group, then use variables to set nCond
+                %                nCond = size(handles.freq,2);   %%% if only one stimulus group, then use variables to set nCond
             end
             
             imageRect = SetRect(0,0,size(moviedata,1),size(moviedata,2));
@@ -905,7 +916,7 @@ try
     end % of switch stim
     
     %% gamma correction
-    try 
+    try
         load MyGammaTable
         Screen('LoadNormalizedGammaTable', win, gammaTable*[1 1 1]);
     catch
@@ -933,14 +944,14 @@ try
     
     %%send filename to eyecam
     eyecamsock = pnet('udpsocket',8933);
-	eyecam_filename = sprintf('%s_%s_%02d%02d%02d_%02d%02d%02d','E',room,...
-            ck(1)-2000,ck(2),ck(3),ck(4),ck(5),floor(ck(6)));
-	eyecam_filename = ['C:\bin\' eyecam_filename]
-	% eyecammhost and port are now defined in rig_specific.m  
+    eyecam_filename = sprintf('%s_%s_%02d%02d%02d_%02d%02d%02d','E',room,...
+        ck(1)-2000,ck(2),ck(3),ck(4),ck(5),floor(ck(6)));
+    eyecam_filename = ['C:\bin\' eyecam_filename]
+    % eyecammhost and port are now defined in rig_specific.m
     eyecamsock = pnet('udpsocket',8933);
-	pnet(eyecamsock,'write',sprintf('%s', eyecam_filename));
-	pnet(eyecamsock,'writepacket', eyecamhost, eyecamport);
-
+    pnet(eyecamsock,'write',sprintf('%s', eyecam_filename));
+    pnet(eyecamsock,'writepacket', eyecamhost, eyecamport);
+    
     stopudp = pnet('udpsocket',3787);
     statusfile = fopen('statusfile.txt','w');
     startTime = GetSecs();
@@ -994,16 +1005,16 @@ try
         syncPort = tdtPort;
     elseif sync == kintan
         %stimsync conditional added MPS 2105Jan06
-       if stimsync == 'LPT'
-        %lptwrite(888,0); % < - commented out by MCD 2015
-        lptwrite(888,1); % triggers recording in intan
-       elseif stimsync == 'SER'
-        IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
-       else  %stimsync == 'UDP'
-        stimsyncUdp = pnet('udpsocket',1113);
-        pnet(stimsyncUdp, 'write', uint8(0));
-        pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-       end
+        if stimsync == 'LPT'
+            %lptwrite(888,0); % < - commented out by MCD 2015
+            lptwrite(888,1); % triggers recording in intan
+        elseif stimsync == 'SER'
+            IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
+        else  %stimsync == 'UDP'
+            stimsyncUdp = pnet('udpsocket',1113);
+            pnet(stimsyncUdp, 'write', uint8(0));
+            pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+        end
         syncUdp=pnet('udpsocket',1111);
         syncHost = tdtHost;
         syncPort = tdtPort;
@@ -1019,8 +1030,8 @@ try
         
         trackball_syncfilename = sprintf('%s_%s_%02d%02d%02d_%02d%02d%02d','T',room,...
             ck(1)-2000,ck(2),ck(3),ck(4),ck(5),floor(ck(6)))
-       %trackball_syncfilename = [date '/' trackball_syncfilename];
-         % trackballhost and port are now defined in rig_specific.m  trackballhost='mps-pc7.cin.ucsf.edu';
+        %trackball_syncfilename = [date '/' trackball_syncfilename];
+        % trackballhost and port are now defined in rig_specific.m  trackballhost='mps-pc7.cin.ucsf.edu';
         trackballsocket = pnet('udpsocket',1112);
         pnet(trackballsocket,'write',sprintf('%s', trackball_syncfilename));
         pnet(trackballsocket,'writepacket', trackballhost, trackballport);
@@ -1067,7 +1078,7 @@ try
             % for bars w/ contrast = 1 or contrast = -1 (otherwise blank stim is grey)
             % cluts(:,:,:,nCond) = grey - (white-grey)*handles.contrast(c);
             % cluts(:,:,:,nCond) = offclutval;
-         
+            
             textures(nCond) = textures(nCond-1);
             handles.eye(nCond)= 3; %%% NOTE!!! Blank stimulus only for both eyes!
             blankCond = -1;
@@ -1106,7 +1117,7 @@ try
     texturec = 1;
     
     %% finally, run stimulus!!
-  %  warning off MATLAB:concatenation:integerInteraction  %%%% this error comes up in generating udp packet
+    %  warning off MATLAB:concatenation:integerInteraction  %%%% this error comes up in generating udp packet
     try %% put this is a try/catch, so that any crash won't leave screen hung
         ListenChar(2);
         
@@ -1116,7 +1127,7 @@ try
         iter = 0;
         get(handles.blankstim,'Value')
         numiters = nReps * nCond * nStimulusRepetitions;
-       
+        
         % stimulusrep applies when there are multiple stimuli for a particular
         % condition, e.g. different noise patterns.
         stimulusrep = 1;
@@ -1163,19 +1174,23 @@ try
             else
                 condList = 1:nCond;
             end
-          
-          
-           if get(handles.Var1,'Value') == 2
-           end
+            
+            if get(handles.Var1,'Value') == 2
+            end
             % choose condition for this iteration,
             %the formulas transform iter to number from 1 to nCond
             %Anna
             ind=mod(iter,nCond)-1;
             
-            if ind<=0 
+            if ind<=0
+                %            if ind < 1  %%Stryker 27Mar2017
                 ind=ind+nCond;
             end
-            c = condList(ind);
+            if ind >= 1
+                c = condList(ind);
+            else
+                c = condList(1);
+            end
             
             
             %% send condition out--must go before StimSync so that it is already there at beginning of stim
@@ -1212,13 +1227,13 @@ try
                 pnet(syncUdp,'writepacket',syncHost,syncPort);
                 WaitSecs(0.001);
             elseif sync == kintan
-               %stimsync conditional added MPS 2105Jan06
-               if stimsync == 'LPT'
-                %lptwrite(888,0); % < - commented out by MCD 2015
-                lptwrite(888,1+0); % triggers recording in intan
-               elseif stimsync == 'SER'
-                IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
-               else  %stimsync == 'UDP'
+                %stimsync conditional added MPS 2105Jan06
+                if stimsync == 'LPT'
+                    %lptwrite(888,0); % < - commented out by MCD 2015
+                    lptwrite(888,1+0); % triggers recording in intan
+                elseif stimsync == 'SER'
+                    IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
+                else  %stimsync == 'UDP'
                     % turn on laser with eye shutter
                     if handles.eye(c) == 1
                         pnet(stimsyncUdp, 'write', uint8(5)); % 5 == turn laser ON
@@ -1227,33 +1242,33 @@ try
                     % set trial on signal
                     pnet(stimsyncUdp, 'write', uint8(1+0));
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-               end
-             
+                end
+                
                 if (c <= stimConds)
-%                     tdtUDPstring = sprintf('%d %d %d %d %0.2f %0.2f %0.2f',...
-%                         c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value'));
-                tdtUDPstring = [c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value')];
+                    %                     tdtUDPstring = sprintf('%d %d %d %d %0.2f %0.2f %0.2f',...
+                    %                         c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value'));
+                    tdtUDPstring = [c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value')];
                 else
-%                     tdtUDPstring = sprintf('%d %d %d %d %0.2f %0.2f %0.2f',...
-%                         c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value'));
-% %                 c
-%                 handles.var1value(c)
-%                 handles.var2value(c)
-%                 handles.var3value(c)
-tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond];
+                    %                     tdtUDPstring = sprintf('%d %d %d %d %0.2f %0.2f %0.2f',...
+                    %                         c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,get(handles.Var1,'Value'),get(handles.Var2,'Value'),get(handles.Var3,'Value'));
+                    % %                 c
+                    %                 handles.var1value(c)
+                    %                 handles.var2value(c)
+                    %                 handles.var3value(c)
+                    tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond];
                 end
                 pnet(syncUdp,'write',tdtUDPstring);
-%                 sentnow = tdtUDPstring
-%                 typeudp = class(sentnow)
-%                 szupdstring = size(tdtUDPstring)
-%                 thismeans = 'c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,Value),get(handles.Var2,Value),get(handles.Var3,Value)'
+                %                 sentnow = tdtUDPstring
+                %                 typeudp = class(sentnow)
+                %                 szupdstring = size(tdtUDPstring)
+                %                 thismeans = 'c,handles.var1value(c),handles.var2value(c),handles.var3value(c),get(handles.Var1,Value),get(handles.Var2,Value),get(handles.Var3,Value)'
                 pnet(syncUdp,'writepacket',syncHost,syncPort);
                 WaitSecs(0.001);
                 %%% intanSyncData = [intanSyncData; [0 0 s1(f)-startTime]];
                 
             end
             
-
+            
             %% set eye shutters
             disp(sprintf('eye: %d',handles.eye(c)));
             eyeString = sprintf('%c%c',65, uint8(64*handles.eye(c)));
@@ -1272,7 +1287,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                 %	first clut loaded is slow, so must load something
                 %	(at least in old version)
                 %   moglClutBlit(window,textures(c,1),currentclut);
-                %    vbl = Screen('Flip',window); 
+                %    vbl = Screen('Flip',window);
             else  % movie
                 %% set which frames to show
                 if (stim == 3 && stimgroups > 1)
@@ -1289,9 +1304,9 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
             else
                 vbl = Screen('Flip',window);  %%% initial flip, to sync with vertical blank
             end
-
+            
             %% loop through frames
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             %%%%% MH add in filling national instruments buffer %%%%%%
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             if handles.eye(c) == 1
@@ -1313,11 +1328,11 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     tt = tt + 1;
                 end
             end
-
+            
             f = minframe;
             while f <= maxframe
                 s1(f) = GetSecs;
-
+                
                 if clut
                     moglClutBlit(window,textures(c),clutcond(:,:,f));
                     if get(handles.mask,'Value') == 1
@@ -1329,13 +1344,13 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     Screen('DrawTexture',window, textures(texturec,f),[],destRect);
                 end
                 
-                disp('the problem is here, why invalid operation?')
+                % disp('the problem is here, why invalid operation?')
                 if f > 1
-                   vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
+                    vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
                 else
                     vbl = Screen('Flip',window);
                 end
-
+                
                 %% send pupil camera timestamp
                 if ~mod(f-1,6)  % take pupil shot every 12 frames
                     tsnap = toc;
@@ -1383,25 +1398,25 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     lptwrite(888,1+0);
                 elseif sync == kintan
                     %stimsync conditional added MPS 2105Jan06
-                   if stimsync == 'LPT'
-                    lptwrite(888,1+2); % 2^0 + 2^1 --- saying frame is on
-                    WaitSecs(0.001);
-                    lptwrite(888,1); % 2^0
-                   elseif stimsync == 'SER'
-                    IOPort('configureserialport', serialhandle, 'RTS=1'); % RTS=0 is 0V.
-                   elseif stimsync == 'WFC'
-                    pnet(stimsyncUdp, 'write', uint8(c));        %strobe framesync
-                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-                   else %stimsync == 'UDP'
-                    pnet(stimsyncUdp, 'write', uint8(1+2));        %strobe framesync
-                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-                    pnet(stimsyncUdp, 'write', uint8(1+0));
-                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-                    WaitSecs(0.0005);
-                   end
-                     
-%                     WaitSecs(0.001); % commented out by MCD 2015
-%                     lptwrite(888,1+0); % commented out by MCD 2015
+                    if stimsync == 'LPT'
+                        lptwrite(888,1+2); % 2^0 + 2^1 --- saying frame is on
+                        WaitSecs(0.001);
+                        lptwrite(888,1); % 2^0
+                    elseif stimsync == 'SER'
+                        IOPort('configureserialport', serialhandle, 'RTS=1'); % RTS=0 is 0V.
+                    elseif stimsync == 'WFC'
+                        pnet(stimsyncUdp, 'write', uint8(c));        %strobe framesync
+                        pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                    else %stimsync == 'UDP'
+                        pnet(stimsyncUdp, 'write', uint8(1+2));        %strobe framesync
+                        pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                        pnet(stimsyncUdp, 'write', uint8(1+0));
+                        pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                        WaitSecs(0.0005);
+                    end
+                    
+                    %                     WaitSecs(0.001); % commented out by MCD 2015
+                    %                     lptwrite(888,1+0); % commented out by MCD 2015
                     %                     IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
                     
                     if (stim == 3) % for correct sync, must be a movie
@@ -1411,36 +1426,36 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     end
                     intanSyncData = [intanSyncData; [c ph s1(f)-startTime]];
                 end
-    %% real time stimulus change MPS 07/10/2016
+                %% real time stimulus change MPS 07/10/2016
                 if runningexpt == 1
                     rsize=pnet(sockrunning,'readpacket',80,'noblock');
                     if rsize > 0
                         f = maxframe+1;
                         runorstill = (pnet(sockrunning,'read',1,'int16'));
-                       % fprintf(runorstill);
+                        % fprintf(runorstill);
                         iter = runorstill
                     end
                 end
-     %  MPS 30Aug2016  Make sure to stop in mid-stimulus with ESC, 
-     %  or else with number go to selected stimulus as in runningexpt
+                %  MPS 30Aug2016  Make sure to stop in mid-stimulus with ESC,
+                %  or else with number go to selected stimulus as in runningexpt
                 simudpkey = simUDP();
                 if simudpkey > 0
                     f = maxframe+1;
                     if simudpkey == 27
                         donestim = 1;
                         iter = numiters+1;
-                    else  
+                    else
                         iter = simudpkey;
                         
                     end
                     disp('simUDP')
                     disp(iter)
                 end
-%%
+                %%
                 f = f+1;
             end
-
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
+            
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             %%%%% MH add in filling national instruments buffer %%%%%%
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             if handles.eye(c) == 1
@@ -1456,7 +1471,7 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
             end
             
             
-%% done with stimulus
+            %% done with stimulus
             if clearBkgrnd
                 if clut
                     %% Stryker
@@ -1472,8 +1487,8 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     % currentclut = squeeze(clutcond(:,:,nFrames));
                 end
             end
-            disp('the problem is below 2')
-
+            % disp('the problem is below 2')
+            
             vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
             
             % Reset StimSynch
@@ -1488,16 +1503,16 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                 lptwrite(888,0+0);
             elseif sync == kintan
                 %stimsync conditional added MPS 2105Jan06
-               if stimsync == 'LPT'
-                lptwrite(888,1+0); % 2^0 + 2^1 --- saying frame is on
-               elseif stimsync == 'SER'
-                IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
-               else  %stimsync == 'UDP'
-                pnet(stimsyncUdp, 'write', uint8(0));
-                pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-               end
+                if stimsync == 'LPT'
+                    lptwrite(888,1+0); % 2^0 + 2^1 --- saying frame is on
+                elseif stimsync == 'SER'
+                    IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
+                else  %stimsync == 'UDP'
+                    pnet(stimsyncUdp, 'write', uint8(0));
+                    pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                end
                 
-%                 lptwrite(888,0+0); % mcd 2015
+                %                 lptwrite(888,0+0); % mcd 2015
                 %save(syncfilename,'paramfilename','intanSyncData');
                 % changed to unify intan file with parameter file
                 save(paramfilename, 'paramfilename', 'intanSyncData', '-append');
@@ -1505,21 +1520,21 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
             end
             
             Priority(0);
-%            WaitSecs(WaitInt);
-%  MPS 30Aug2016 Wait an integral number of frames instead of a fixed time, 
-%  so that we get the pupil measurements during the wait period
-%  Do not wait if runningexpt
-        if ~runningexpt
-            for ff=1:floor(WaitInt/FrameInt)
-                vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
-    
-                if ~mod(ff,6)  % take pupil shot every 6 fromes
-                    tsnap = toc;
-                    pnet(eyecamsock,'write',single(tsnap));
-                    pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
+            %            WaitSecs(WaitInt);
+            %  MPS 30Aug2016 Wait an integral number of frames instead of a fixed time,
+            %  so that we get the pupil measurements during the wait period
+            %  Do not wait if runningexpt
+            if ~runningexpt
+                for ff=1:floor(WaitInt/FrameInt)
+                    vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
+                    
+                    if ~mod(ff,6)  % take pupil shot every 6 fromes
+                        tsnap = toc;
+                        pnet(eyecamsock,'write',single(tsnap));
+                        pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
+                    end
                 end
             end
-        end
             
             if nFrames > 1
                 ds = max(ds,diff(s1));
@@ -1545,10 +1560,10 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
                     doneStim = 1;
                     disp('Exit on a ESC');
                 end
-%                 keyspressed = KbName(find(keyCode));
-%                 %disp(sprintf('Exit on %s key pressed',keyspressed{1})); %
-%                 %somehow giving an error
-%                 disp('Exit on a keypress');
+                %                 keyspressed = KbName(find(keyCode));
+                %                 %disp(sprintf('Exit on %s key pressed',keyspressed{1})); %
+                %                 %somehow giving an error
+                %                 disp('Exit on a keypress');
             end
             
             % look for stop message on UDP
@@ -1571,22 +1586,22 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
         %while ~doneStim
         pnet(eyecamsock,'write',single(-1));
         pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
-
+        
         if sync == ktdtUDP   %% write one last packet to end last trial
             pnet(syncUdp,'write',sprintf('%d %d %d %0.2f %0.2f',999,999,999,0.0,0.0));
             pnet(syncUdp,'writepacket',syncHost,syncPort);
         end
         if sync == kintan
-           %stimsync conditional added MPS 2105Jan06
-           if stimsync == 'LPT'
-            lptwrite(888,0); % 2^0 + 2^1 --- saying frame is on
-           elseif stimsync == 'SER'
-            IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
-           else  %stimsync == 'UDP'
-            pnet(stimsyncUdp, 'write', uint8(0));
-            pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
-            pnet(stimsyncUdp,'close');
-           end
+            %stimsync conditional added MPS 2105Jan06
+            if stimsync == 'LPT'
+                lptwrite(888,0); % 2^0 + 2^1 --- saying frame is on
+            elseif stimsync == 'SER'
+                IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
+            else  %stimsync == 'UDP'
+                pnet(stimsyncUdp, 'write', uint8(0));
+                pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                pnet(stimsyncUdp,'close');
+            end
             pnet(trackballsocket,'write',sprintf('%s\n', 'close'));
             pnet(trackballsocket,'writepacket', trackballhost, trackballport);
             pnet(trackballsocket,'close');
@@ -1608,10 +1623,10 @@ tdtUDPstring = [c,blankCond+flickCond,blankCond+flickCond,blankCond+flickCond,bl
         Screen('LoadNormalizedGammaTable',window,flat_clut);
         Screen('CloseAll');
         
-%         f = figure(1);
-%         set(f,'Position',[1 35 1024 130])
-%         plot(ds);
-%         title('Dropped frames');
+        %         f = figure(1);
+        %         set(f,'Position',[1 35 1024 130])
+        %         plot(ds);
+        %         title('Dropped frames');
         
         ShowCursor;
         %%% if there's an error, clean up and rethrow the error
@@ -2148,7 +2163,6 @@ variscircular = 0;
 if (get(handles.Var1,'Value')) == 2 && (Start1 == 0) && (Stop1 == 360)
     variscircular = 1; % orientation
 end
-
 if LinLog1 == 1
     if variscircular
         Var1Range = linspace(Start1, Stop1, nSteps1+1);
@@ -2166,8 +2180,7 @@ set(hObject,'String',mat2str(Var1Range,3));
 
 [handles.orient handles.freq handles.speed handles.contrast handles.phase ...
     handles.TempFreq handles.var1value handles.var2value handles.var3value ...
-    handles.positionX handles.positionY handles.length handles.eye] = generateVarParams(handles);
-
+    handles.positionX handles.positionY handles.length handles.eye nCond] = generateVarParams(handles);
 %% Cris had an arbitrary coding scheme--why?  Constim compatibility?
 codes = [0 4 23 10 13 24 18 7 8  22, 999]; % Shinya added 999 for adding length, without knowing what this coding is.
 handles.var1code = codes(get(handles.Var1,'Value'));
@@ -2224,7 +2237,7 @@ set(hObject,'String',mat2str(Var2Range,3));
 
 [handles.orient handles.freq handles.speed handles.contrast handles.phase ...
     handles.TempFreq handles.var1value handles.var2value handles.var3value ...
-    handles.positionX handles.positionY handles.length handles.eye] = generateVarParams(handles);
+    handles.positionX handles.positionY handles.length handles.eye nCond] = generateVarParams(handles);
 
 %% Cris had an arbitrary coding scheme--why?  Constim compatibility?
 %codes = [0 4 23 10 13 24 18 7 8  22];
@@ -2752,7 +2765,7 @@ function eyeCond0_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 if str2double(get(hObject,'string')) == 0 %none
     set(handles.laser_ramp_dur,'Enable','off');
-    set(handles.laser_amp,'Enable','off');    
+    set(handles.laser_amp,'Enable','off');
 else
     set(handles.laser_ramp_dur,'Enable','on');
     set(handles.laser_amp,'Enable','on');
@@ -2940,7 +2953,7 @@ set(hObject,'String',mat2str(Var3Range,3));
 
 [handles.orient handles.freq handles.speed handles.contrast handles.phase ...
     handles.TempFreq handles.var1value handles.var2value handles.var3value ...
-    handles.positionX handles.positionY handles.length handles.eye] = generateVarParams(handles);
+    handles.positionX handles.positionY handles.length handles.eye nCond] = generateVarParams(handles);
 
 %% Cris had an arbitrary coding scheme--why?  Constim compatibility?
 %codes = [0 4 23 10 13 24 18 7 8  22];

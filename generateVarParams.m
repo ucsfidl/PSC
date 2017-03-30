@@ -1,4 +1,4 @@
-function [orient freq speed contrast phase TempFreq var1value var2value var3value positionX positionY length eye] = generateVarParams(handles)
+function [orient freq speed contrast phase TempFreq var1value var2value var3value positionX positionY length eye cond] = generateVarParams(handles)
 
 Var1 = get(handles.Var1,'Value');
 Var2 = get(handles.Var2,'Value');
@@ -7,21 +7,21 @@ Var3 = get(handles.Var3,'Value');
 
 Var1_range = str2num(get(handles.Var1Range,'String'));
 if Var1>1
-    nCond1 = size(Var1_range,2)
+    nCond1 = size(Var1_range,2);
 else
     nCond1=1;
 end
 
 Var2_range = str2num(get(handles.Var2Range,'String'));
 if Var2>1
-    nCond2 = size(Var2_range,2)
+    nCond2 = size(Var2_range,2);
 else
     nCond2=1;
 end
 
 Var3_range = str2num(get(handles.Var3Range,'String'));
 if Var3>1
-    nCond3 = size(Var3_range,2)
+    nCond3 = size(Var3_range,2);
 else
     nCond3=1;
 end
@@ -145,14 +145,14 @@ for c1 = 1:nCond1
         end %c3
     end  %c2
 end %c1
-
-
-orient
-freq
-speed
-contrast
-phase
-TempFreq
-positionX
-positionY
+nCond = cond
+% 
+% orient
+% freq
+% speed
+% contrast
+% phase
+% TempFreq
+% positionX
+% positionY
 
