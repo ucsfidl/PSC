@@ -56,7 +56,6 @@ stimsyncfolder = 'C:\stim\'
 runningexpt = 0;
 C=6000;  % circumference in ticks for new small mice used with RPi
 tickspercm = C/(pi*20);  %%% ball is 20 cm diameter, so this is ticks/cm
-
-
+oldGraphics = 1;
 
 

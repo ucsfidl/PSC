@@ -155,10 +155,12 @@ Var2_Callback(handles.Var2,eventdata,handles);
 Var3_Callback(handles.Var3,eventdata,handles);
 
 % MH setup the NI card
+try
 devices = daq.getDevices;
 if ~isempty(devices)
     niHardwareHandle = daq.createSession('ni');
     niHardwareHandle.addAnalogOutputChannel('Dev1', 'ao0', 'Voltage');
+end
 end
 
 % try
@@ -319,7 +321,7 @@ try
     % kcsUDP
     
     %%% load file with rig-specific parameters
-    rigSpecific_pc5;
+    rigSpecific_pc39;
     sockrunning = pnet('udpsocket',runningport);
     
     
@@ -338,11 +340,14 @@ try
     
     SaveParams(handles,paramfilename);
     whichScreen = str2double(get(handles.ScreenNum,'String'));
-    Screen('Preference', 'SkipSyncTests', 0);
-    PsychImaging('PrepareConfiguration');
-    PsychImaging('AddTask', 'AllViews', 'EnableCLUTMapping');
-    [window,windowRect] = PsychImaging('OpenWindow', whichScreen, 0);
-    
+    if oldGraphics
+        Screen('Preference', 'SkipSyncTests', 0);
+        [window,windowRect]=Screen(whichScreen,'OpenWindow',128);   %%% open grey window
+    else
+        PsychImaging('PrepareConfiguration');
+        PsychImaging('AddTask', 'AllViews', 'EnableCLUTMapping');
+        [window,windowRect] = PsychImaging('OpenWindow', whichScreen, 0);
+    end
     InitializeMatlabOpenGL;   %%%necessary for OpenGL calls (like ClutBlit)
     
     Screen('Preference','VisualDebugLevel', 1);  %MPS
