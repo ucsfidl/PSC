@@ -155,12 +155,12 @@ Var2_Callback(handles.Var2,eventdata,handles);
 Var3_Callback(handles.Var3,eventdata,handles);
 
 % MH setup the NI card
-try
+daqreset
+global niHandle
 devices = daq.getDevices;
 if ~isempty(devices)
-    niHardwareHandle = daq.createSession('ni');
-    niHardwareHandle.addAnalogOutputChannel('Dev1', 'ao0', 'Voltage');
-end
+    niHandle = daq.createSession('ni');
+    niHandle.addAnalogOutputChannel('Dev1', 'ao0', 'Voltage')
 end
 
 % try
@@ -321,7 +321,7 @@ try
     % kcsUDP
     
     %%% load file with rig-specific parameters
-    rigSpecific_pc39;
+    rigSpecific_pc5;
     sockrunning = pnet('udpsocket',runningport);
     
     
@@ -340,14 +340,11 @@ try
     
     SaveParams(handles,paramfilename);
     whichScreen = str2double(get(handles.ScreenNum,'String'));
-    if oldGraphics
-        Screen('Preference', 'SkipSyncTests', 0);
-        [window,windowRect]=Screen(whichScreen,'OpenWindow',128);   %%% open grey window
-    else
-        PsychImaging('PrepareConfiguration');
-        PsychImaging('AddTask', 'AllViews', 'EnableCLUTMapping');
-        [window,windowRect] = PsychImaging('OpenWindow', whichScreen, 0);
-    end
+    Screen('Preference', 'SkipSyncTests', 0);
+    PsychImaging('PrepareConfiguration');
+    PsychImaging('AddTask', 'AllViews', 'EnableCLUTMapping');
+    [window,windowRect] = PsychImaging('OpenWindow', whichScreen, 0);
+    
     InitializeMatlabOpenGL;   %%%necessary for OpenGL calls (like ClutBlit)
     
     Screen('Preference','VisualDebugLevel', 1);  %MPS
@@ -424,7 +421,7 @@ try
                 elseif get(handles.StimType,'Value')==16   %%% drift gratings with static grating at the first half
                     [img cl] = generateGratings_lut(handles.orient(c),handles.freq(c),handles.TempFreq(c),handles.phase(c),handles.contrast(c),Duration, degPerPix,imageRect(3),imageRect(4),FrameHz,black,white,sizeLut);
                     for i=1:size(cl,3)/2
-                        cl(:,:,i)=cl(:,:,end/2+1);
+                        cl(:,:,i)=cl(:,:,round(end/2)+1);
                     end
                 elseif get(handles.StimType,'Value')==6 % counterphase gratings
                     [img cl] = generateCPGratings_lut(handles.orient(c),handles.freq(c),handles.TempFreq(c),handles.phase(c),handles.contrast(c),Duration, degPerPix,imageRect(3),imageRect(4),FrameHz,black,white,sizeLut);
@@ -854,7 +851,14 @@ try
             
             %%%%% movie %%%%%
         case 3
+            try
+                a = get(handles.MovieName,'String')
+                moviedata = load(a)
+                sizemoviedata = size(moviedata)
             load(get(handles.MovieName,'String'),'moviedata');
+            catch
+                keyboard
+            end
             
             MovieMag = str2double(get(handles.MovieMag,'String'));
             MovieRate = str2double(get(handles.MovieRate,'String'));
@@ -1040,8 +1044,6 @@ try
         trackballsocket = pnet('udpsocket',1112);
         pnet(trackballsocket,'write',sprintf('%s', trackball_syncfilename));
         pnet(trackballsocket,'writepacket', trackballhost, trackballport);
-        %% end MPS 2014-07-14
-        startTime=GetSecs;
     end
     
     % shutterHost = 'mps-d.ucsf.edu'
@@ -1245,8 +1247,12 @@ try
                         pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                     end
                     % set trial on signal
-                    pnet(stimsyncUdp, 'write', uint8(1+0));
+                    pnet(stimsyncUdp, 'write', uint8(2+0));
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
+                    %%% Send elapsed time to the eyecam computer
+                    elapsedTime = GetSecs - startTime;
+                    pnet(eyecamsock,'write',sprintf('%0.3f\n',elapsedTime));
+                    pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
                 end
                 
                 if (c <= stimConds)
@@ -1311,11 +1317,11 @@ try
             end
             
             %% loop through frames
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
             %%%%% MH add in filling national instruments buffer %%%%%%
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
             if handles.eye(c) == 1
-                global laserRampDur laserAmp laserTotalDur slope
+                global laserRampDur laserAmp laserTotalDur slope niHandle
                 
                 laserRampDur = str2double(get(handles.laser_ramp_dur, 'string')); % correct this and add the other data
                 laserTotalDur = str2double(get(handles.Duration, 'string')); % correct this and add the other data
@@ -1328,7 +1334,7 @@ try
                 tt = 0;
                 while tt < laserRampDur
                     if (toc-start_time)*1e3 > tt
-                        niHardwareHandle.outputSingleScan(slope*tt);
+                        niHandle.outputSingleScan(slope*tt);
                     end
                     tt = tt + 1;
                 end
@@ -1357,11 +1363,11 @@ try
                 end
                 
                 %% send pupil camera timestamp
-                if ~mod(f-1,6)  % take pupil shot every 12 frames
-                    tsnap = toc;
-                    pnet(eyecamsock,'write',single(tsnap));
-                    pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
-                end
+%                 if ~mod(f-1,6)  % take pupil shot every 12 frames
+%                     tsnap = toc;
+%                     pnet(eyecamsock,'write',single(tsnap));
+%                     pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
+%                 end
                 %% Send StimSync and FrameSync
                 if sync == kcsUDP
                     %ph = uint32(floor(phMax * mod(f-1,nFrames) /nFrames));
@@ -1429,7 +1435,7 @@ try
                     else
                         ph = f;
                     end
-                    intanSyncData = [intanSyncData; [c ph s1(f)-startTime]];
+                    intanSyncData = [intanSyncData; [c ph s1(f)-startTime handles.eye(c)]];
                 end
                 %% real time stimulus change MPS 07/10/2016
                 if runningexpt == 1
@@ -1460,21 +1466,12 @@ try
                 f = f+1;
             end
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%          
             %%%%% MH add in filling national instruments buffer %%%%%%
             %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            if handles.eye(c) == 1
-                tic;
-                start_time = toc;
-                tt = 0;
-                while tt < laserRampDur
-                    if (toc-start_time)*1e3 > tt
-                        niHardwareHandle.outputSingleScan(laserAmp-slope*tt);
-                    end
-                    tt = tt + 1;
-                end
+            if handles.eye(c) == 1            
+                niHandle.outputSingleScan(0);
             end
-            
             
             %% done with stimulus
             if clearBkgrnd
@@ -1513,7 +1510,7 @@ try
                 elseif stimsync == 'SER'
                     IOPort('configureserialport', serialhandle, 'RTS=0'); % RTS=0 is 0V.
                 else  %stimsync == 'UDP'
-                    pnet(stimsyncUdp, 'write', uint8(0));
+                    pnet(stimsyncUdp, 'write', uint8(5));
                     pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                 end
                 
@@ -1533,11 +1530,11 @@ try
                 for ff=1:floor(WaitInt/FrameInt)
                     vbl = Screen('Flip',window, vbl + (FrameWait - 0.5) * FrameInt);
                     
-                    if ~mod(ff,6)  % take pupil shot every 6 fromes
-                        tsnap = toc;
-                        pnet(eyecamsock,'write',single(tsnap));
-                        pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
-                    end
+%                     if ~mod(ff,6)  % take pupil shot every 6 fromes
+%                         tsnap = toc;
+%                         pnet(eyecamsock,'write',single(tsnap));
+%                         pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
+%                     end
                 end
             end
             
@@ -1588,9 +1585,9 @@ try
             
         end
         
-        %while ~doneStim
-        pnet(eyecamsock,'write',single(-1));
-        pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
+%         %while ~doneStim
+%         pnet(eyecamsock,'write',single(-1));
+%         pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
         
         if sync == ktdtUDP   %% write one last packet to end last trial
             pnet(syncUdp,'write',sprintf('%d %d %d %0.2f %0.2f',999,999,999,0.0,0.0));
@@ -1607,10 +1604,14 @@ try
                 pnet(stimsyncUdp, 'writepacket', stimsynchost, stimsyncport);
                 pnet(stimsyncUdp,'close');
             end
+            % send trackball stop
             pnet(trackballsocket,'write',sprintf('%s\n', 'close'));
             pnet(trackballsocket,'writepacket', trackballhost, trackballport);
             pnet(trackballsocket,'close');
             pnet(syncUdp,'close');
+            % send eyecam stop
+            pnet(eyecamsock,'write',sprintf('%s\n', 'stop'));
+            pnet(eyecamsock,'writepacket',eyecamhost,eyecamport);
         end
         
         
